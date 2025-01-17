@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <xacro:macro name="livox_mid361"
+                 params="name parent *origin">
+        <xacro:property name="M_PI" value="3.14159"/>
+        <xacro:property name="laser_min_range" value="0.1"/>
+        <xacro:property name="laser_max_range" value="500.0"/>
+        <xacro:property name="ros_topic" value="/livox/left"/>
+        <xacro:property name="samples" value="20000"/>
+        <xacro:property name="visualize" value="true"/>
+        <xacro:property name="update_rate" value="10"/>
+        <xacro:property name="resolution" value="1"/>
+        <xacro:property name="noise_mean" value="0.0"/>
+        <xacro:property name="noise_stddev" value="0.0"/>
+        <xacro:property name="downsample" value="1"/>
+        <link name="${name}">
+            <inertial>
+                <origin rpy="0 0 0" xyz="0 0 -0.0076"/>
+                <mass value="0.270"/>
+                <inertia
+                        ixx="${(2*0.270)/5.0*(0.022*0.022)}" ixy="0.0" ixz="0.0"
+                        iyy="${(2*0.270)/5.0*(0.022*0.022)}" iyz="0.0"
+                        izz="${(2*0.270)/5.0*(0.022*0.022)}"/>
+            </inertial>
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 -0.0076"/>
+                <geometry>
+                    <sphere radius="0.022"/>
+                </geometry>
+                <color rgba="0.0 0.0 0.5 0.5"/>
+            </visual>
+
+            <collision>
+                <origin xyz="0 0 0.027" rpy="0 0 0"/>
+                <geometry>
+                    <box size="0.003 0.067 0.0165"/>
+                </geometry>
+            </collision>
+            <collision>
+                <origin xyz="0 0.041 0.007" rpy="-1.04 0 0"/>
+                <geometry>
+                    <box size="0.003 0.055 0.024"/>
+                </geometry>
+            </collision>
+            <collision>
+                <origin xyz="0 -0.041 0.007" rpy="1.04 0 0"/>
+                <geometry>
+                    <box size="0.003 0.055 0.024"/>
+                </geometry>
+            </collision>
+
+            <collision>
+                <origin xyz="0 0 0.027" rpy="0 0 0"/>
+                <geometry>
+                    <box size="0.067 0.003 0.0165"/>
+                </geometry>
+            </collision>
+            <collision>
+                <origin xyz="0.041 0 0.007" rpy="0 1.04 0"/>
+                <geometry>
+                    <box size="0.055 0.003 0.024"/>
+                </geometry>
+            </collision>
+            <collision>
+                <origin xyz="-0.041 0 0.007" rpy="0 -1.04 0"/>
+                <geometry>
+                    <box size="0.055 0.003 0.024"/>
+                </geometry>
+            </collision>
+        </link>
+
+        <joint name="${name}_fixed" type="fixed">
+            <xacro:insert_block name="origin"/>
+            <parent link="${parent}"/>
+            <child link="${name}"/>
+        </joint>
+
+
+        <gazebo reference="${name}">
+            <self_collide>1</self_collide>
+            <material>Gazebo/Blue</material>
+            <sensor type="ray" name="laser_${name}">
+                <pose>0 0 0 0 0 0</pose>
+                <visualize>${visualize}</visualize>
+                <update_rate>${update_rate}</update_rate>
+                <!-- This ray plgin is only for visualization. -->
+                <plugin name="gazebo_ros_laser_controller" filename="liblivox_laser_simulation.so">
+                    <ray>
+                        <scan>
+                            <horizontal>
+                                <samples>100</samples>
+                                <resolution>1</resolution>
+                                <min_angle>${0}</min_angle>
+                                <max_angle>${2*M_PI}</max_angle>
+                            </horizontal>
+                            <vertical>
+                                <samples>360</samples>
+                                <resolution>1</resolution>
+                                <min_angle>${-7.22/180*M_PI}</min_angle>
+                                <max_angle>${55.22/180*M_PI}</max_angle>
+                            </vertical>
+                        </scan>
+                        <range>
+                            <min>${laser_min_range}</min>
+                            <max>${laser_max_range}</max>
+                            <resolution>${resolution}</resolution>
+                        </range>
+                        <noise>
+                            <type>gaussian</type>
+                            <mean>${noise_mean}</mean>
+                            <stddev>${noise_stddev}</stddev>
+                        </noise>
+                    </ray>
+                    <visualize>${visualize}</visualize>
+                    <samples>${samples}</samples>
+                    <downsample>${downsample}</downsample>
+                    <csv_file_name>$(find livox_laser_simulation)/scan_mode/mid360.csv</csv_file_name>
+                    <ros_topic>${ros_topic}</ros_topic>
+                </plugin>
+            </sensor>
+        </gazebo>
+    </xacro:macro>
+</robot>

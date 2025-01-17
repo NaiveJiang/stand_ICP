@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="hunter">
+    <xacro:arg name="sim" default="false"/>
+
+    <xacro:include filename="$(find legged_hunter_description)/urdf/hunter_sim.xacro"/>
+
+    <xacro:include filename="$(find legged_hunter_description)/urdf/sensor_d435.xacro"/>
+    <!-- <xacro:include filename="$(find legged_perceptive_description)/urdf/sensor_t265.xacro"/> -->
+    <!-- <xacro:include filename="$(find legged_perceptive_description)/urdf/mid360.xacro"/> -->
+    <!-- <xacro:include filename="$(find legged_perceptive_description)/urdf/livox_mid360.xacro"/>
+    <xacro:include filename="$(find legged_perceptive_description)/urdf/livox_mid361.xacro"/> -->
+
+
+    <xacro:sensor_d435 name="front_camera" topics_ns="front_camera" parent="base_link">
+        <origin xyz="0.25 -0.0 0.08" rpy="3.141 1.2 0"/>
+    </xacro:sensor_d435>
+
+
+
+    <!-- <xacro:sensor_t265 name="tracking_camera" topics_ns="tracking_camera" parent="base">
+        <origin xyz="0.16 0 0.085" rpy="0 -1.04 0"/>
+    </xacro:sensor_t265> -->
+
+
+    <!-- <xacro:livox_mid360 name="livox_right" parent="base_link">
+        <origin xyz="0.365 -0.068 -0.030" rpy="-2.59 1.03 3.09"/>
+    </xacro:livox_mid360>
+
+    <xacro:livox_mid361 name="livox_left" parent="base_link">
+        <origin xyz="0.365 0.068 -0.030" rpy="2.59 1.03 -3.09"/>
+    </xacro:livox_mid361> -->
+
+</robot>

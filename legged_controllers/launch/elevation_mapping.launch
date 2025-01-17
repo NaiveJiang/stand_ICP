@@ -1,0 +1,36 @@
+<launch>
+    <arg name="manager" default="point_cloud_manager"/>
+
+    <node pkg="nodelet" type="nodelet" name="$(arg manager)" args="manager"
+          output="screen"/>
+
+    <rosparam command="load" file="$(find legged_controllers)/config/body_filter.yaml"/>
+
+<!--     <node pkg="nodelet" type="nodelet" name="livox_right_filter" -->
+<!--           args="load sensor_filters/pointcloud2_filter_chain $(arg manager)"> -->
+<!--         <remap from="~input" to="/livox/lidar_192_168_8_101"/> -->
+<!--         <remap from="~output" to="/livox/right"/> -->
+<!--     </node> -->
+
+<!--     <node pkg="nodelet" type="nodelet" name="livox_left_filter" -->
+<!--           args="load sensor_filters/pointcloud2_filter_chain $(arg manager)"> -->
+<!--         <remap from="~input" to="/livox/lidar_192_168_8_102"/> -->
+<!--         <remap from="~output" to="/livox/left"/> -->
+<!--     </node> -->
+
+    <!-- Elevation mapping node -->
+    <node pkg="elevation_mapping" type="elevation_mapping" name="elevation_mapping" output="screen">
+        <rosparam command="load" file="$(find legged_controllers)/config/elevation_mapping.yaml"/>
+    </node>
+
+    <include file="$(find convex_plane_decomposition_ros)/launch/convex_plane_decomposition.launch">    <!--启动地形分割节点-->
+        <arg name="parameter_file"
+             value="$(find legged_controllers)/config/convex_plane_decomposition.yaml"/>
+    </include>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="odom_tf_publisher"
+          args="0 0 0 0 0 0 1 map odom"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="map_tf_publisher"
+          args="0 0 0 0 0 0 1 odom base_link"/>
+</launch>

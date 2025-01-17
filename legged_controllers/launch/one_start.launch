@@ -1,0 +1,74 @@
+<?xml version="1.0" ?>
+
+<launch>
+    <arg name="robot_type" default="hunter" doc="Robot type: [hunter]"/>
+    <arg name="cheater" default="false"/>
+
+    <include file="$(find legged_controllers)/launch/joy_teleop.launch"/>
+    <!-- <include file="$(find legged_controllers)/launch/elevation_mapping.launch"/> -->
+    <!-- make the files into global parameters -->
+    <!-- 
+      根据可选参数robot_type选择对应机器人的参数文件路径(.urdf、task.info等)
+      并将这些路径存储在ros全局参数(param)中，ros可以通过访问这些参数得到对应文件路径 
+    -->
+    <param name="urdfFile" value="$(find legged_hunter_description)/urdf/hunter.urdf"/>
+    <param name="taskFile" value="$(find legged_controllers)/config/$(arg robot_type)/task.info"/>
+    <param name="referenceFile" value="$(find legged_controllers)/config/$(arg robot_type)/reference.info"/>
+    <param name="gaitCommandFile" value="$(find legged_controllers)/config/$(arg robot_type)/gait.info"/>
+
+    <param name="trajDataFile" value="$(find legged_controllers)/data/q_qd_q2d.csv"/>
+    <param name="collectDataDir" value="$(find legged_controllers)/data/"/>
+
+    <!--
+      rosparam用于加载复杂格式参数，这里加载yaml文件 
+      加载控制器选项，用于之后controller_loader节点选择启动的控制器
+    -->
+    <rosparam file="$(find legged_controllers)/config/controllers.yaml" command="load"/>
+
+    <!-- 
+      如果可选参数cheater为true，则创建controller_loader节点
+      使用controller_manager包的spawner工具，动态加载并启动ros控制器
+      spawner启动controllers.yaml里的legged_controller和legged_cheater_controller两个项目对应的控制器实现
+    -->  
+    <node if="$(arg cheater)" name="controller_loader" pkg="controller_manager" type="spawner"
+          output="screen" args="
+          controllers/legged_controller
+          controllers/legged_cheater_controller"/>
+    <!-- 
+      如果可选参数cheater为false，则创建controller_loader节点
+      spawner仅启动legged_controller控制器
+    -->        
+    <node unless="$(arg cheater)" name="controller_loader" pkg="controller_manager" type="spawner"
+          output="screen" args="
+          controllers/legged_controller"/>
+
+    <!-- 
+      创建legged_robot_target节点
+      使用legged_controllers包的legged_target_trajectories_publisher方法
+      legged_target_trajectories_publisher在CMakeLists里的源码是TargetTrajectoriesPublisher.cpp，即实现方法在TargetTrajectoriesPublisher.cpp里
+    -->  
+    <node pkg="legged_controllers" type="legged_target_trajectories_publisher" name="legged_robot_target"
+          output="screen"/>
+          
+</launch>
+
+<!--
+    启动one_start.launch文件时：
+    创建2个可选参数：
+        robot_type，默认为hunter，用来选择不同的机器人文件(urdf等)
+        cheater，默认为false，用于controller_loader节点，选择启动的控制器
+    创建6个ros全局参数：
+        urdfFile，根据robot_type选择urdf路径
+        taskFile，根据robot_type选择task.info文件
+        referenceFile，根据robot_type选择referenceFile.info文件
+        gaitCommandFile，根据robot_type选择gait.info文件
+        trajDataFile
+        collectDataDir
+    加载1个yaml文件：
+        controllers.yaml  
+    创建了2个节点：
+        controller_loader
+        legged_robot_target
+    启动了1个launch文件：
+        joy_teleop.launch
+-->

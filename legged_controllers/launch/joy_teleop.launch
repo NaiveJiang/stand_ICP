@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+
+<launch>
+    <!--遥控器输入的路径-->
+    <arg name="joy_dev" default="/dev/input/js0"/>
+    <!--遥控器配置，定义了一些遥控器的按键操作等，并将这些操作作为话题发布-->
+    <arg name="teleop_config" default="$(find legged_controllers)/config/joy.yaml"/>
+
+    <!--
+        遥控器节点，对joy_dev指向路径的遥控器进行配置，并作为节点发布遥控器输入信息
+    -->
+    <node pkg="joy" type="joy_node" name="joy_node">
+        <param name="dev" value="$(arg joy_dev)"/>
+        <param name="deadzone" value="1e-3"/>
+        <param name="autorepeat_rate" value="10"/>     <!--发布频率-->
+        <param name="coalesce_interval" value="0.05"/>
+    </node>
+
+    <!--加载遥控器配置，发布遥控器输入对应的指令话题-->
+    <rosparam file="$(arg teleop_config)" command="load"/>
+    <node pkg="joy_teleop" type="joy_teleop.py" name="joy_teleop">
+    </node>
+
+</launch>
+
+<!--
+    启动joy_teleop.launch文件时：
+    创建2个可选参数：
+        joy_dev
+        teleop_config
+    创建4个ros全局参数，创建在joy_node节点里：
+        dev
+        deadzone
+        autorepeat_rate
+        coalesce_interval
+    加载1个yaml文件：
+        joy.yaml 
+    创建了2个节点：
+        joy_node
+        joy_teleop
+-->

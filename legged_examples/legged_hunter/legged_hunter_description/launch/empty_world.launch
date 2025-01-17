@@ -1,0 +1,52 @@
+<launch>
+    <arg name="robot_type" default="hunter" doc="Robot type: [hunter]"/>
+    <param name="legged_robot_description" textfile="$(find legged_hunter_description)/urdf/hunter.urdf"/>
+    <param name="legged_robot_description_sim" command="$(find xacro)/xacro $(find legged_hunter_description)/urdf/robot.xacro robot_type:=$(arg robot_type) sim:=true"/>
+
+    <!-- <param name="legged_robot_description_sim" textfile="/tmp/hunter_control/hunter.urdf"/> -->
+
+    <node name="generate_urdf" pkg="legged_common" type="generate_urdf.sh" output="screen"
+          args="$(find legged_hunter_description)/urdf/robot.xacro $(arg robot_type)"/>     
+
+    <rosparam file="$(find legged_gazebo)/config/default.yaml" command="load"/>
+
+    <!--启动gazebo仿真器-->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(find legged_gazebo)/worlds/empty_world.world"/>
+    </include>
+
+    <!-- <include file="$(find legged_gazebo)/launch/waao_world.launch">
+        
+        <arg name="world_name" value="$(find legged_gazebo)/worlds/waao_world.world"/>
+    </include> -->
+
+
+
+    <!-- push robot_description to factory and spawn robot in gazebo -->
+    <!--
+        创建spawn_urdf节点，在gazebo中导入机器人3d模型
+        clear_params="true"表示节点启动时会清空参数服务器中与此节点相关的参数
+        args的参数表示：
+            -z 0.64         在-z方向0.64高度放置模型（gazebo的z方向朝下）
+            -param          legged_robot_description_sim 加载param全局参数，选择仿真urdf路径
+            -urdf           选择加载urdf文件
+            -model hunter   将模型命名为hunter
+    -->
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" clear_params="true" 
+        args="-z 0.888 -param legged_robot_description_sim -urdf -model $(arg robot_type) " output="screen"/>
+
+</launch>
+
+<!--
+    启动empty_world.launch文件时：
+    创建2个ros全局参数：
+        legged_robot_description，选择实物urdf路径
+        legged_robot_description_sim，选择仿真urdf路径
+    加载1个yaml文件：
+        default.yaml，加载gazebo的通信延迟、imu协方差、接触点连杆名称 
+    创建了1个节点：
+        spawn_urdf
+    启动了1个launch文件：
+        empty_world.launch（legged_gazebo）启动gazebo
+-->
+

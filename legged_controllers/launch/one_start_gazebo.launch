@@ -1,0 +1,37 @@
+<?xml version="1.0" ?>
+
+<launch>
+    <arg name="robot_type" default="hunter" doc="Robot type: [hunter]"/>
+    <arg name="rviz" default="true"/>
+    <arg name="record_data" default="false"/>
+    
+    <include file="$(find legged_hunter_description)/launch/empty_world.launch"/>
+    
+    <!--创建延时节点timedelay_launch，延时2s启动one_start.launch-->
+    <node pkg="legged_controllers" type="timedelay_launch.sh" name="timedelay_launch" args="2 legged_controllers one_start.launch" output="screen"/>
+    <!--如果rviz项为true，则建立rviz节点，可视化机器人以及mpc轨迹等，同时导入rviz的配置文件legged_robot.rviz，required="true"表示如果rviz崩溃则系统停止运行-->
+    <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find legged_controllers)/rviz/legged_robot.rviz" required="true" />
+
+    <group if="$(arg record_data)">
+        <include file="$(find legged_controllers)/launch/record_data.launch"/>
+    </group>
+    <!--rqt_reconfigure节点，一个可视化调试参数插件-->
+    <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" output="screen"></node>
+
+</launch>
+
+
+<!--
+    启动one_start_gazebo.launch文件时：
+    创建3个可选参数：
+        robot_type，默认为hunter，用来选择不同的机器人文件(urdf等)
+        rviz，默认为true，用于开启rviz节点
+        record_data，默认为false，用于启动record_data.launch文件
+    创建了3个节点：
+        timedelay_launch
+        rviz
+        rqt_reconfigure
+    启动了2个launch文件：
+        empty_world.launch
+        one_start.launch（在timedelay_launch节点延时2s后启动）
+-->
