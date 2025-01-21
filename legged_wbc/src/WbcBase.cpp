@@ -63,6 +63,14 @@ namespace legged
     footPosDes_.setZero();
     footPosMea_.setZero();
 
+#if USE_6_AXIS_FOOT
+    footVelDes_.resize(12);
+    footVelMea_.resize(12);
+    footRotDes_ = matrix_t(6, 3);
+    footRotMea_ = matrix_t(6, 3);
+    footRotDes_.setZero();
+    footRotMea_.setZero();
+#endif
     footVelDes_.setZero();
     footVelMea_.setZero();
 
@@ -80,6 +88,7 @@ namespace legged
     dhg.setZero();
 
     i_ric.setZero();
+    copPostion.setZero();
 
     dcmDesired_.z() = 0.8;
     omega0 = sqrt(-pinocchioInterfaceMeasured_.getModel().gravity981.z() / dcmDesired_.z());
@@ -88,7 +97,7 @@ namespace legged
   }
 
   vector_t WbcBase::update(const vector_t &stateDesired, const vector_t &inputDesired, const vector_t &rbdStateMeasured,
-                           size_t mode, scalar_t /*period*/, const SystemObservation & /*observation*/)
+                           size_t mode, scalar_t /*period*/, const SystemObservation & observation)
   {
     contactFlag_ = modeNumber2StanceLeg(mode);
     numContacts_ = 0;
@@ -100,13 +109,13 @@ namespace legged
       }
     }
 
-    updateMeasured(rbdStateMeasured);
+    updateMeasured(rbdStateMeasured, observation);
     updateDesired(stateDesired, inputDesired);
 
     return {};
   }
 
-  void WbcBase::updateMeasured(const vector_t &rbdStateMeasured)
+  void WbcBase::updateMeasured(const vector_t &rbdStateMeasured, const SystemObservation &observation)
   {
     qMeasured_.head<3>() = rbdStateMeasured.segment<3>(3);                                     // xyz linaer pos  来自机体估计出来的位置
     qMeasured_.segment<3>(3) = rbdStateMeasured.head<3>();                                     // 来自机体估计出来的姿态
@@ -166,10 +175,41 @@ namespace legged
     pinocchio::getFrameJacobian(model, data, model.getBodyId("base_link"), pinocchio::LOCAL_WORLD_ALIGNED, base_j_);
     pinocchio::getFrameJacobianTimeVariation(model, data, model.getBodyId("base_link"), pinocchio::LOCAL_WORLD_ALIGNED,
                                              base_dj_);
+    
+#if USE_6_AXIS_FOOT
+    jf = matrix_t(12, info_.generalizedCoordinatesNum).setZero(); // 脚板雅可比
+    djf = matrix_t(12, info_.generalizedCoordinatesNum).setZero();
+    auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
+    Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jf0;
+    jf0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf0);
+    jf.block(0, 0, 6, info_.generalizedCoordinatesNum) = jf0;
 
+    jf0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobianTimeVariation(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf0);
+    djf.block(0, 0, 6, info_.generalizedCoordinatesNum) = jf0;
+
+    // 脚板的位置和速度
+    footPosMea_.segment<3>(0) = data.oMf[frameID].translation();
+    footRotMea_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
+    footVelMea_.segment<6>(0) = jf * vMeasured_;
+
+    frameID = model.getFrameId("leg_r6_link", pinocchio::BODY);
+    jf0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf0);
+    jf.block(6, 0, 6, info_.generalizedCoordinatesNum) = jf0;
+
+    jf0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobianTimeVariation(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf0);
+    djf.block(6, 0, 6, info_.generalizedCoordinatesNum) = jf0;
+
+    // 脚板的位置和速度
+    footPosMea_.segment<3>(3) = data.oMf[frameID].translation();
+    footRotMea_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
+    footVelMea_.segment<6>(6) = jf * vMeasured_;
+#else
     jf = matrix_t(6, info_.generalizedCoordinatesNum).setZero(); // 脚板雅可比
     djf = matrix_t(6, info_.generalizedCoordinatesNum).setZero();
-
     auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
     Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jf0;
     jf0.setZero(6, info_.generalizedCoordinatesNum);
@@ -196,6 +236,23 @@ namespace legged
     // 脚板的位置和速度
     footPosMea_.segment<3>(3) = data.oMf[frameID].translation();
     footVelMea_.segment<3>(3) = jf.block(3, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
+#endif
+
+    eeKinematics_->setPinocchioInterface(pinocchioInterfaceMeasured_);
+    std::vector<vector3_t> feetPositionsMeasure = eeKinematics_->getPosition(observation.state);
+    double sum_z = 0.0;
+    scalar_t avg_feetPos_x = 0.0;
+    scalar_t avg_feetPos_y = 0.0;
+    for (size_t i = 0; i < info_.numThreeDofContacts; i++)
+    {
+      feetForcesMeasure[i] = centroidal_model::getContactForces(observation.input, i, info_);
+      sum_z += feetForcesMeasure[i].z();
+      copPostion += feetForcesMeasure[i].z() * feetPositionsMeasure[i];
+      avg_feetPos_x += feetPositionsMeasure[i].x();
+      avg_feetPos_y += feetPositionsMeasure[i].y();
+    }
+    if (sum_z > 0)
+      copPostion /= sum_z;
 
     pinocchio::dccrba(model, data, qMeasured_, vMeasured_);
     pinocchio::computeCentroidalMomentumTimeVariation(model, data);
@@ -215,10 +272,16 @@ namespace legged
     {
       dcmDesired_.x() = comPosition_.x();
       dcmDesired_.y() = comPosition_.y();
-      dcmDesired_.z() = 0.8;
+      dcmDesired_.z() = comPosition_.z();
     }
-    else
+    else{
+      // dcmDesired_.z() = comPosition_.z();
+      // dcmDesired_.x() = (footPosMea_(0) + footPosMea_(3)) * 0.5;
+      // dcmDesired_.y() = (footPosMea_(1) + footPosMea_(4)) * 0.5;
       omega0 = sqrt(-model.gravity981.z() / dcmMeasured_.z());
+    }
+    // std::cout << avg_feetPos_x / info_.numThreeDofContacts << std::endl;
+    // std::cout << avg_feetPos_y / info_.numThreeDofContacts << std::endl;
   }
 
   void WbcBase::updateDesired(const vector_t &stateDesired, const vector_t &inputDesired) // 输入MPC的状态
@@ -238,7 +301,24 @@ namespace legged
 
     armVelDesired_ = mapping_.getPinocchioJointVelocity(stateDesired, inputDesired).tail(14);
     pinocchio::forwardKinematics(model, data, qDesired, vDesired);
+#if USE_6_AXIS_FOOT
+    auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
+    footPosDes_.segment<3>(0) = data.oMf[frameID].translation();
+    footRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
 
+    Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jf_des;
+    jf_des.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf_des);
+    footVelDes_.segment<6>(0) = jf_des * vDesired;
+
+    frameID = model.getFrameId("leg_r6_link", pinocchio::BODY);
+    footPosDes_.segment<3>(3) = data.oMf[frameID].translation();
+    footRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
+
+    jf_des.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf_des);
+    footVelDes_.segment<6>(6) = jf_des * vDesired;
+#else
     auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
     footPosDes_.segment<3>(0) = data.oMf[frameID].translation();
     Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jf_des;
@@ -251,6 +331,8 @@ namespace legged
     jf_des.setZero(6, info_.generalizedCoordinatesNum);
     pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf_des);
     footVelDes_.segment<3>(3) = jf_des.block(3, 0, 3, info_.generalizedCoordinatesNum) * vDesired;
+#endif
+    
 
     const vector_t jointAccelerations = vector_t::Zero(info_.actuatedDofNum); // 保存关节加速度
     rbdConversions_.computeBaseKinematicsFromCentroidalModel(stateDesired, inputDesired, jointAccelerations, basePoseDes_,
@@ -547,7 +629,7 @@ namespace legged
     auto rcm = data_mea.com[0]; // 质心位置
 
     std::vector<vector3_t> r(info_.numThreeDofContacts);
-    const auto feetPositionsMeasure = eeKinematics_->getPosition(observation.state);
+    std::vector<vector3_t> feetPositionsMeasure = eeKinematics_->getPosition(observation.state);
     for (size_t i = 0; i < info_.numThreeDofContacts; i++)
     {
       feetForcesMeasure[i] = centroidal_model::getContactForces(observation.input, i, info_);
@@ -583,6 +665,11 @@ namespace legged
 
     // h_des.segment(0, 2) = mass_ * (momLKp_ * (comPosition_ - dcmDesired_).segment<2>(0) + momLKd_ * (hg.segment<2>(0) / mass_));
     h_des(2) = mass_ * (momLKzp_ * rcm_z_bias - momLKzd_ * (hg(2) / mass_));
+    // scalar_t tau_y = (dcmMeasured_(0) + momLKp_ * dcm_bias(0) + momLKi_ * i_ric(0) - copPostion(0)) * mass_ * pinocchioInterfaceMeasured_.getModel().gravity981.z();
+    // scalar_t tau_x = (dcmMeasured_(1) + momLKp_ * dcm_bias(1) + momLKi_ * i_ric(1) - copPostion(1)) * mass_ * pinocchioInterfaceMeasured_.getModel().gravity981.z();
+    // h_des(3) = tau_y;
+    // h_des(4) = tau_x;
+    // h_des(5) = -momAKp_ * hg(5);
     h_des.segment(3, 3) = -momAKp_ * hg.segment<3>(3);
     // h_des.segment(3, 3).setZero();   //使用这个弹性大
     // linearMomentumDesired.segment(0,2) = h_des.segment<2>(0);
@@ -688,6 +775,22 @@ namespace legged
 
   Task WbcBase::formulatefootTask()
   {
+#if USE_6_AXIS_FOOT
+    matrix_t a(12, numDecisionVars_);
+    vector_t b(a.rows());
+
+    a.setZero();
+    b.setZero();
+
+    a.block(0, 0, 12, info_.generalizedCoordinatesNum) = jf;
+    vector3_t rotErrL = rotationErrorInWorld<scalar_t>(footRotDes_.block(0, 0, 3, 3), footRotMea_.block(0, 0, 3, 3));
+    vector3_t rotErrR = rotationErrorInWorld<scalar_t>(footRotDes_.block(3, 0, 3, 3), footRotMea_.block(3, 0, 3, 3));
+    b.segment<3>(0) = footLKp_ * (footPosDes_ - footPosMea_).segment<3>(0) + footLKd_ * (footVelDes_ - footVelMea_).segment<3>(0);
+    b.segment<3>(3) = footAKp_ * rotErrL + footAKd_ * (footVelDes_ - footVelMea_).segment<3>(3);
+    b.segment<3>(6) = footLKp_ * (footPosDes_ - footPosMea_).segment<3>(3) + footLKd_ * (footVelDes_ - footVelMea_).segment<3>(6);
+    b.segment<3>(9) = footAKp_ * rotErrR + footAKd_ * (footVelDes_ - footVelMea_).segment<3>(9);
+    b -= djf * vMeasured_;
+#else
     matrix_t a(6, numDecisionVars_);
     vector_t b(a.rows());
 
@@ -696,6 +799,7 @@ namespace legged
 
     a.block(0, 0, 6, info_.generalizedCoordinatesNum) = jf;
     b = footLKp_ * (footPosDes_ - footPosMea_) + footLKd_ * (footVelDes_ - footVelMea_) - djf * vMeasured_;
+#endif
 
     return {a, b, matrix_t(), vector_t()};
   }
@@ -788,6 +892,10 @@ namespace legged
     }
     loadData::loadPtreeValue(pt, footLKp_, prefix + "Lkp", verbose);
     loadData::loadPtreeValue(pt, footLKd_, prefix + "Lkd", verbose);
+#if USE_6_AXIS_FOOT
+    loadData::loadPtreeValue(pt, footLKp_, prefix + "Akp", verbose);
+    loadData::loadPtreeValue(pt, footLKd_, prefix + "Akd", verbose);
+#endif
     prefix = "armTask.";
     if (verbose)
     {

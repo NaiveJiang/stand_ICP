@@ -230,13 +230,15 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
       // optimizedState.segment(6 + 6, jointDim_) = defalutJointPos_;                                 // 用的话关节就会被锁死了
       if(hand_reset_flg){
         optimizedState.segment(6 + 6 + 12, 6) = defalutJointPos_.segment<6>(12) * 2 * sinf64(timeh);
-        optimizedState.segment(6 + 6 + 12, 14) = optimizedState.segment(6 + 6 + 12, 14).setOnes() * 1.0 * sinf64(timeh);
+        optimizedState.segment(6 + 6 + 12, 14) = optimizedState.segment(6 + 6 + 12, 14).setOnes() * 1.1 * sinf64(timeh);
         optimizedState.segment(6 + 6 + 12 + 7, 7) = -optimizedState.segment(6 + 6 + 12 + 7, 7);
-        timeh += 0.005;
+        timeh += 0.008;
         // optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
-      }
-      if(body_reset_flg){
-        optimizedState.segment(9, 3).setZero(); // 机体姿态
+      }else
+        optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
+      if (body_reset_flg)
+      {
+          optimizedState.segment(9, 3).setZero(); // 机体姿态
       }
       // optimizedState.segment(9, 3).setZero(); // 机体姿态
 
@@ -367,7 +369,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         else if (j == 5 || j == 11)
         {
           hybridJointHandles_[j].setCommand(posDes_[j], velDes_[j],
-                                            cmdContactFlag[int(j / 6)] ? 250 : 250, 0.0,
+                                            cmdContactFlag[int(j / 6)] ? 250 : 250, 1.5,
                                             wbc_planned_torque(j));
         }
         else if ((j >= 12 && j <= 17) || (j >= 19 && j <= 24))

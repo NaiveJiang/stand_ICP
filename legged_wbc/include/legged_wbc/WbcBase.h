@@ -28,6 +28,7 @@ namespace legged
   // w -> 0, v -> 0
 
   // Decision Variables: x = [\dot u^T, 3*F(3)^T, \tau^T]^T , \dot u in local frame
+  #define USE_6_AXIS_FOOT 1
   class WbcBase
   {
     using Vector6 = Eigen::Matrix<scalar_t, 6, 1>;
@@ -83,6 +84,7 @@ namespace legged
     bool init_flg;
     Eigen::Matrix<scalar_t, 3, 1> ric_des;
     Eigen::Matrix<scalar_t, 3, 1> i_ric;
+    vector3_t copPostion;
 
     std::vector<vector3_t> feetForcesMeasure;
     std::vector<vector3_t> feetTorqueMeasure;
@@ -128,7 +130,7 @@ namespace legged
     }
 
   protected:
-    void updateMeasured(const vector_t &rbdStateMeasured);
+    void updateMeasured(const vector_t &rbdStateMeasured, const SystemObservation &observation);
     void updateDesired(const vector_t &stateDesired, const vector_t &inputDesired);
 
     size_t getNumDecisionVars() const
@@ -161,10 +163,17 @@ namespace legged
     scalar_t armKp_{}, armKd_{};
 
     Task formulatefootTask();
-    vector6_t footPosDes_, footVelDes_;
-    vector6_t footPosMea_, footVelMea_;
+    vector6_t footPosDes_, footPosMea_;
     matrix_t jf, djf;
     scalar_t footLKp_{}, footLKd_{};
+#if USE_6_AXIS_FOOT
+    vector_t footVelDes_, footVelMea_;
+    matrix_t footRotDes_, footRotMea_;
+    scalar_t footAKp_{}, footAKd_{};
+#else
+    vector6_t footVelDes_, footVelMea_;
+#endif
+    
 
     void compensateFriction(vector_t &x);
 
