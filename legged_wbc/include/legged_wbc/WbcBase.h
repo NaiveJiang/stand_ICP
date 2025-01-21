@@ -29,6 +29,7 @@ namespace legged
 
   // Decision Variables: x = [\dot u^T, 3*F(3)^T, \tau^T]^T , \dot u in local frame
   #define USE_6_AXIS_FOOT 1
+  #define USE_6_AXIS_HAND 0
   class WbcBase
   {
     using Vector6 = Eigen::Matrix<scalar_t, 6, 1>;
@@ -173,7 +174,17 @@ namespace legged
 #else
     vector6_t footVelDes_, footVelMea_;
 #endif
-    
+
+#if USE_6_AXIS_HAND
+    Task formulateHandTask();
+    vector6_t handPosDes_, handPosMea_;
+    matrix_t jh, djh;
+    scalar_t handLKp_{}, handLKd_{};
+    scalar_t handAKp_{}, handAKd_{};
+    vector_t handVelDes_, handVelMea_;
+    matrix_t handRotDes_, handRotMea_;
+#endif
+
 
     void compensateFriction(vector_t &x);
 

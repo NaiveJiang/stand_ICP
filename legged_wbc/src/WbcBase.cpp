@@ -79,6 +79,19 @@ namespace legged
     armVelDesired_.resize(14);
     armVelDesired_.setZero();
 
+#if USE_6_AXIS_HAND
+    handPosDes_.setZero();
+    handPosMea_.setZero();
+    handVelDes_.resize(12);
+    handVelMea_.resize(12);
+    handRotDes_ = matrix_t(6, 3);
+    handRotMea_ = matrix_t(6, 3);
+    handRotDes_.setZero();
+    handRotMea_.setZero();
+    handVelDes_.setZero();
+    handVelMea_.setZero();
+#endif
+
     Ag(6, info_.generalizedCoordinatesNum);
     dAg(6, info_.generalizedCoordinatesNum);
     Ag.setZero();
@@ -238,6 +251,40 @@ namespace legged
     footVelMea_.segment<3>(3) = jf.block(3, 0, 3, info_.generalizedCoordinatesNum) * vMeasured_;
 #endif
 
+#if USE_6_AXIS_HAND
+    jh = matrix_t(12, info_.generalizedCoordinatesNum).setZero(); // 手雅可比
+    djh = matrix_t(12, info_.generalizedCoordinatesNum).setZero();
+
+    frameID = model.getFrameId("zarm_l_f1_link", pinocchio::BODY);
+    Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jh0;
+    jh0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh0);
+    jh.block(0, 0, 6, info_.generalizedCoordinatesNum) = jh0;
+
+    jh0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobianTimeVariation(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh0);
+    djh.block(0, 0, 6, info_.generalizedCoordinatesNum) = jh0;
+
+    // 手的位置和速度
+    handPosMea_.segment<3>(0) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation(); //要在局部坐标系下
+    handRotMea_.block(0, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+    handVelMea_.segment<6>(0) = jh * vMeasured_;
+
+    frameID = model.getFrameId("zarm_r_f1_link", pinocchio::BODY);
+    jh0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh0);
+    jh.block(6, 0, 6, info_.generalizedCoordinatesNum) = jh0;
+
+    jh0.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobianTimeVariation(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh0);
+    djh.block(6, 0, 6, info_.generalizedCoordinatesNum) = jh0;
+
+    // 手的位置和速度
+    handPosMea_.segment<3>(3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation(); //要在局部坐标系下
+    handRotMea_.block(3, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+    handVelMea_.segment<6>(6) = jh * vMeasured_;
+#endif
+
     eeKinematics_->setPinocchioInterface(pinocchioInterfaceMeasured_);
     std::vector<vector3_t> feetPositionsMeasure = eeKinematics_->getPosition(observation.state);
     double sum_z = 0.0;
@@ -301,6 +348,7 @@ namespace legged
 
     armVelDesired_ = mapping_.getPinocchioJointVelocity(stateDesired, inputDesired).tail(14);
     pinocchio::forwardKinematics(model, data, qDesired, vDesired);
+
 #if USE_6_AXIS_FOOT
     auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
     footPosDes_.segment<3>(0) = data.oMf[frameID].translation();
@@ -332,7 +380,25 @@ namespace legged
     pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf_des);
     footVelDes_.segment<3>(3) = jf_des.block(3, 0, 3, info_.generalizedCoordinatesNum) * vDesired;
 #endif
-    
+
+#if USE_6_AXIS_HAND
+    frameID = model.getFrameId("zarm_l_f1_link", pinocchio::BODY);
+    handPosDes_.segment<3>(0) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation();
+    handRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+
+    Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jh_des;
+    jh_des.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh_des);
+    handVelDes_.segment<6>(0) = jh_des * vDesired;
+
+    frameID = model.getFrameId("zarm_r_f1_link", pinocchio::BODY);
+    handPosDes_.segment<3>(3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation();
+    handRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+
+    jh_des.setZero(6, info_.generalizedCoordinatesNum);
+    pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh_des);
+    handVelDes_.segment<6>(6) = jh_des * vDesired;
+#endif
 
     const vector_t jointAccelerations = vector_t::Zero(info_.actuatedDofNum); // 保存关节加速度
     rbdConversions_.computeBaseKinematicsFromCentroidalModel(stateDesired, inputDesired, jointAccelerations, basePoseDes_,
@@ -804,6 +870,28 @@ namespace legged
     return {a, b, matrix_t(), vector_t()};
   }
 
+#if USE_6_AXIS_HAND
+  Task WbcBase::formulateHandTask()
+  {
+    matrix_t a(12, numDecisionVars_);
+    vector_t b(a.rows());
+
+    a.setZero();
+    b.setZero();
+
+    a.block(0, 0, 12, info_.generalizedCoordinatesNum) = jh;
+    vector3_t rotErrL = rotationErrorInWorld<scalar_t>(handRotDes_.block(0, 0, 3, 3), handRotMea_.block(0, 0, 3, 3));
+    vector3_t rotErrR = rotationErrorInWorld<scalar_t>(handRotDes_.block(3, 0, 3, 3), handRotMea_.block(3, 0, 3, 3));
+    b.segment<3>(0) = handLKp_ * (handPosDes_ - handPosMea_).segment<3>(0) + handLKd_ * (handVelDes_ - handVelMea_).segment<3>(0);
+    b.segment<3>(3) = handAKp_ * rotErrL + handAKd_ * (handVelDes_ - handVelMea_).segment<3>(3);
+    b.segment<3>(6) = handLKp_ * (handPosDes_ - handPosMea_).segment<3>(3) + handLKd_ * (handVelDes_ - handVelMea_).segment<3>(6);
+    b.segment<3>(9) = handAKp_ * rotErrR + handAKd_ * (handVelDes_ - handVelMea_).segment<3>(9);
+    b -= djf * vMeasured_;
+
+    return {a, b, matrix_t(), vector_t()};
+  }
+#endif
+
   void WbcBase::loadTasksSetting(const std::string &taskFile, bool verbose)
   {
     // Load task file
@@ -904,6 +992,18 @@ namespace legged
     }
     loadData::loadPtreeValue(pt, armKp_, prefix + "kp", verbose);
     loadData::loadPtreeValue(pt, armKd_, prefix + "kd", verbose);
+#if USE_6_AXIS_HAND
+    prefix = "handTask.";
+    if (verbose)
+    {
+      std::cerr << "\n #### handTask Task:";
+      std::cerr << "\n #### =============================================================================\n";
+    }
+    loadData::loadPtreeValue(pt, footLKp_, prefix + "Lkp", verbose);
+    loadData::loadPtreeValue(pt, footLKd_, prefix + "Lkd", verbose);
+    loadData::loadPtreeValue(pt, footLKp_, prefix + "Akp", verbose);
+    loadData::loadPtreeValue(pt, footLKd_, prefix + "Akd", verbose);
+#endif
   }
 
 } // namespace legged

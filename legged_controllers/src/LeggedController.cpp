@@ -234,7 +234,8 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         optimizedState.segment(6 + 6 + 12 + 7, 7) = -optimizedState.segment(6 + 6 + 12 + 7, 7);
         timeh += 0.008;
         // optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
-      }else
+      }
+      else
         optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
       if (body_reset_flg)
       {
