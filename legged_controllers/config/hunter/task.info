@@ -234,6 +234,7 @@ Q
   (21,21)  15.0     ; leg_r4_joint
   (22,22)  5.0      ; leg_r5_joint
   (23,23)  5.0      ; leg_r6_joint
+  
   (24,24)  13.0     ; arm_l1_joint
   (25,25)  13.0     ; arm_l2_joint
   (26,26)  13.0     ; arm_l3_joint
@@ -315,6 +316,13 @@ R
   (46,46)   2000.0   ; y
   (47,47)   2000.0   ; z
   
+  ;; arm velocity relative to base: [linear(3), angular(3)] (uses the Jacobian at nominal configuration) ;;
+  ;(48,48)   2000.0   ; x
+  ;(49,49)   2000.0   ; y
+  ;(50,50)   2000.0   ; z
+  ;(51,51)   2000.0   ; x
+  ;(52,52)   2000.0   ; y
+  ;(53,53)   2000.0   ; z
 }
 
 frictionConeSoftConstraint
@@ -425,10 +433,10 @@ footTask
 
 handTask
 {
-    Lkp                    0.0
-    Lkd                    0.0
-    Akp                    0.0
-    Akd                    0.0
+    Lkp                    100.0
+    Lkd                    1.0
+    Akp                    10.0
+    Akd                    0.1
 }
 
 armTask

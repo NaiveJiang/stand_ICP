@@ -235,8 +235,10 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
         timeh += 0.008;
         // optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
       }
+#if !USE_6_AXIS_HAND
       else
         optimizedState.segment(6 + 6 + 12, 14) = defalutJointPos_.segment<14>(12);
+#endif
       if (body_reset_flg)
       {
           optimizedState.segment(9, 3).setZero(); // 机体姿态
@@ -384,6 +386,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
           hybridJointHandles_[j].setCommand(posDes_[j], velDes_[j],
                                             5.0, 0.1,
                                             wbc_planned_torque(j));
+          
         }
       }
       if (emergencyStopFlag_) // 急停

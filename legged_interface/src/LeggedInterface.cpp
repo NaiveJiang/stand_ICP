@@ -182,23 +182,27 @@ void LeggedInterface::setupOptimalControlProblem(const std::string& taskFile, co
     problemPtr_->softConstraintPtr->add(footName + "_xySwingSoft",
                                         getSoftSwingTrajConstraint(*eeKinematicsPtr, i, taskFile, verbose));      //足端xy方向软约束
 
-    // 松弛障碍罚函数初始化
-    std::unique_ptr<PenaltyBase> placementPenalty(new RelaxedBarrierPenalty(RelaxedBarrierPenalty::Config(1e-2, 1e-4)));
-    std::unique_ptr<PenaltyBase> collisionPenalty(new RelaxedBarrierPenalty(RelaxedBarrierPenalty::Config(3e-2, 1e-3)));
+    //手不算感控
+    if (i < centroidalModelInfo_.numThreeDofContacts - 2){
+      // 松弛障碍罚函数初始化
+      std::unique_ptr<PenaltyBase> placementPenalty(new RelaxedBarrierPenalty(RelaxedBarrierPenalty::Config(1e-2, 1e-4)));
+      std::unique_ptr<PenaltyBase> collisionPenalty(new RelaxedBarrierPenalty(RelaxedBarrierPenalty::Config(3e-2, 1e-3)));
 
-    // For foot placement   落脚约束
-    std::unique_ptr<FootPlacementConstraint> footPlacementConstraint(
-        new FootPlacementConstraint(*referenceManagerPtr_, *eeKinematicsPtr, i, numVertices_));
-    problemPtr_->stateSoftConstraintPtr->add(
-        footName + "_footPlacement",
-        std::unique_ptr<StateCost>(new StateSoftConstraint(std::move(footPlacementConstraint), std::move(placementPenalty))));
+      // For foot placement   落脚约束
+      std::unique_ptr<FootPlacementConstraint> footPlacementConstraint(
+          new FootPlacementConstraint(*referenceManagerPtr_, *eeKinematicsPtr, i, numVertices_));
+      problemPtr_->stateSoftConstraintPtr->add(
+          footName + "_footPlacement",
+          std::unique_ptr<StateCost>(new StateSoftConstraint(std::move(footPlacementConstraint), std::move(placementPenalty))));
 
-    // For foot Collision   足端碰撞约束  摆动时防止足端发生碰撞
-    std::unique_ptr<FootCollisionConstraint> footCollisionConstraint(
-        new FootCollisionConstraint(*referenceManagerPtr_, *eeKinematicsPtr, signedDistanceFieldPtr_, i, 0.03));
-    problemPtr_->stateSoftConstraintPtr->add(
-        footName + "_footCollision",
-        std::unique_ptr<StateCost>(new StateSoftConstraint(std::move(footCollisionConstraint), std::move(collisionPenalty))));
+      // For foot Collision   足端碰撞约束  摆动时防止足端发生碰撞
+      std::unique_ptr<FootCollisionConstraint> footCollisionConstraint(
+          new FootCollisionConstraint(*referenceManagerPtr_, *eeKinematicsPtr, signedDistanceFieldPtr_, i, 0.03));
+      problemPtr_->stateSoftConstraintPtr->add(
+          footName + "_footCollision",
+          std::unique_ptr<StateCost>(new StateSoftConstraint(std::move(footCollisionConstraint), std::move(collisionPenalty))));
+    }
+      
   }
   
   problemPtr_->softConstraintPtr->add("StateInputLimitSoft", getLimitConstraints(centroidalModelInfo_));    //状态输入极值软约束
@@ -316,7 +320,7 @@ std::shared_ptr<GaitSchedule> LeggedInterface::loadGaitSchedule(const std::strin
 /******************************************************************************************************/
 /******************************************************************************************************/
 matrix_t LeggedInterface::initializeInputCostWeight(const std::string& taskFile, const CentroidalModelInfo& info)
-{
+{ //输入u=(f1,f2,...,fn,v1,v2,...,vk) n为接触点个数，k为驱动关节个数
   const size_t totalContactDim = 3 * info.numThreeDofContacts + 6 * info.numSixDofContacts;
   const auto& model = pinocchioInterfacePtr_->getModel();
   auto& data = pinocchioInterfacePtr_->getData();
@@ -329,18 +333,18 @@ matrix_t LeggedInterface::initializeInputCostWeight(const std::string& taskFile,
   {
     matrix_t jac = matrix_t::Zero(6, info.generalizedCoordinatesNum);
     pinocchio::getFrameJacobian(model, data, model.getBodyId(modelSettings_.contactNames3DoF[i]),
-                                pinocchio::LOCAL_WORLD_ALIGNED, jac);
+                                pinocchio::LOCAL_WORLD_ALIGNED, jac); //实质上是相对于世界？
     base2feetJac.block(3 * i, 0, 3, info.actuatedDofNum) = jac.block(0, 6, 3, info.actuatedDofNum);
   }
-
+  
   matrix_t rTaskspace(totalContactDim + totalContactDim, totalContactDim + totalContactDim);
   loadData::loadEigenMatrix(taskFile, "R", rTaskspace);
   matrix_t r(info.inputDim, info.inputDim);
   r.setZero();
   r.topLeftCorner(totalContactDim, totalContactDim) = rTaskspace.topLeftCorner(totalContactDim, totalContactDim);
+  // 要优化足端的速度，但是输入是关节的速度，所以需要用雅可比 v_f = Jv, v_f^T*R*v_f = v^T*J^T*R*J*v = v^T*R1*v, R1 = J^T*R*J
   r.block(totalContactDim, totalContactDim, info.actuatedDofNum, info.actuatedDofNum) =
-      base2feetJac.transpose() * rTaskspace.block(totalContactDim, totalContactDim, totalContactDim, totalContactDim) *
-      base2feetJac;
+      base2feetJac.transpose() * rTaskspace.block(totalContactDim, totalContactDim, totalContactDim, totalContactDim) * base2feetJac;   
   return r;
 }
 
@@ -372,16 +376,16 @@ std::unique_ptr<StateInputCost> LeggedInterface::getBaseTrackingCost(const std::
 std::unique_ptr<StateInputCost> LeggedInterface::getLimitConstraints(const CentroidalModelInfo& info)
 {
   const size_t totalContactDim = 3 * info.numThreeDofContacts + 6 * info.numSixDofContacts;
-  const int constraints_num = info.actuatedDofNum + info.actuatedDofNum + info.numThreeDofContacts;
+  const int constraints_num = info.actuatedDofNum + info.actuatedDofNum + info.numThreeDofContacts;   //关节位置、速度，法向力
   vector_t e(constraints_num);
   matrix_t C(constraints_num, info.stateDim);
   matrix_t D(constraints_num, info.inputDim);
   e.setZero();    //偏移量
   C.setZero();    //状态对约束的影响
   D.setZero();    //输入对约束的影响      一个线性系统约束的一般形式Cx+Du+e=0
-  C.topRightCorner(info.actuatedDofNum, info.actuatedDofNum).setIdentity();
-  D.block(info.actuatedDofNum, totalContactDim, info.actuatedDofNum, info.actuatedDofNum).setIdentity();
-  //反作用力限幅
+  C.topRightCorner(info.actuatedDofNum, info.actuatedDofNum).setIdentity();   //关节位置
+  D.block(info.actuatedDofNum, totalContactDim, info.actuatedDofNum, info.actuatedDofNum).setIdentity();  //关节速度
+  //法向反作用力限幅
   D(info.actuatedDofNum + info.actuatedDofNum + 0, 2) = 1;
   D(info.actuatedDofNum + info.actuatedDofNum + 1, 5) = 1;
   D(info.actuatedDofNum + info.actuatedDofNum + 2, 8) = 1;
@@ -390,7 +394,10 @@ std::unique_ptr<StateInputCost> LeggedInterface::getLimitConstraints(const Centr
   D(info.actuatedDofNum + info.actuatedDofNum + 5, 17) = 1;
   D(info.actuatedDofNum + info.actuatedDofNum + 6, 20) = 1;
   D(info.actuatedDofNum + info.actuatedDofNum + 7, 23) = 1;
-  
+  //手
+  D(info.actuatedDofNum + info.actuatedDofNum + 8, 26) = 1;
+  D(info.actuatedDofNum + info.actuatedDofNum + 9, 29) = 1;
+
   std::vector<std::unique_ptr<PenaltyBase>> state_input_limit_penalty;
 
   state_input_limit_penalty.resize(constraints_num);    //定义状态输入限幅惩罚

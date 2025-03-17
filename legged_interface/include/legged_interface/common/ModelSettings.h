@@ -62,7 +62,10 @@ struct ModelSettings
                                       "zarm_r1_joint", "zarm_r2_joint", "zarm_r3_joint","zarm_r4_joint", "zarm_r5_joint", "zarm_r6_joint", "zarm_r7_joint"};
   std::vector<std::string> contactNames6DoF{};
   std::vector<std::string> contactNames3DoF{"leg_l_f1_link", "leg_r_f1_link", "leg_l_f2_link", "leg_r_f2_link",
-                                            "leg_l_f3_link", "leg_r_f3_link", "leg_l_f4_link", "leg_r_f4_link"}; // 末端执行器名字
+                                            "leg_l_f3_link", "leg_r_f3_link", "leg_l_f4_link", "leg_r_f4_link",
+                                            //手
+                                            "zarm_l_f1_link", "zarm_r_f1_link"
+                                            }; // 末端执行器名字
 };
 
 ModelSettings loadModelSettings(const std::string& filename, const std::string& fieldName = "model_settings",

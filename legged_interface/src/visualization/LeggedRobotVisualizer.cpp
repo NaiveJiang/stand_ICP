@@ -179,7 +179,7 @@ void LeggedRobotVisualizer::update(const SystemObservation &observation, const P
     publishObservation(timeStamp, observation);
     // publishDesiredLinearMomentum(linearMomentumDes);
     publishDCMPosition(timeStamp, rbdState /*rbdStateTraj*/, dcmDesired,dcmMeasured);
-    // publishfootPosition(timeStamp,footDes,footMea);
+    publishfootPosition(timeStamp,footDes,footMea);
     publishDesiredTrajectory(timeStamp, command.mpcTargetTrajectories_, swingTrajectoryPlanner);
     publishOptimizedStateTrajectory(timeStamp, primalSolution.timeTrajectory_, primalSolution.stateTrajectory_,
                                     primalSolution.modeSchedule_);

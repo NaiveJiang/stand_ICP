@@ -266,8 +266,8 @@ namespace legged
     djh.block(0, 0, 6, info_.generalizedCoordinatesNum) = jh0;
 
     // 手的位置和速度
-    handPosMea_.segment<3>(0) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation(); //要在局部坐标系下
-    handRotMea_.block(0, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+    handPosMea_.segment<3>(0) = data.oMf[frameID].translation() - data.oMf[model.getBodyId("base_link")].translation();
+    handRotMea_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
     handVelMea_.segment<6>(0) = jh * vMeasured_;
 
     frameID = model.getFrameId("zarm_r_f1_link", pinocchio::BODY);
@@ -280,8 +280,8 @@ namespace legged
     djh.block(6, 0, 6, info_.generalizedCoordinatesNum) = jh0;
 
     // 手的位置和速度
-    handPosMea_.segment<3>(3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation(); //要在局部坐标系下
-    handRotMea_.block(3, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+    handPosMea_.segment<3>(3) = data.oMf[frameID].translation() - data.oMf[model.getBodyId("base_link")].translation(); // 要在局部坐标系下
+    handRotMea_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
     handVelMea_.segment<6>(6) = jh * vMeasured_;
 #endif
 
@@ -323,9 +323,9 @@ namespace legged
     }
     else{
       // dcmDesired_.z() = comPosition_.z();
-      // dcmDesired_.x() = (footPosMea_(0) + footPosMea_(3)) * 0.5;
-      // dcmDesired_.y() = (footPosMea_(1) + footPosMea_(4)) * 0.5;
-      omega0 = sqrt(-model.gravity981.z() / dcmMeasured_.z());
+      dcmDesired_.x() = -(footPosMea_(0) + footPosMea_(3)) * 0.5;
+      dcmDesired_.y() = -(footPosMea_(1) + footPosMea_(4)) * 0.5;
+      omega0 = sqrt(-model.gravity981.z() / dcmDesired_.z());
     }
     // std::cout << avg_feetPos_x / info_.numThreeDofContacts << std::endl;
     // std::cout << avg_feetPos_y / info_.numThreeDofContacts << std::endl;
@@ -351,8 +351,10 @@ namespace legged
 
 #if USE_6_AXIS_FOOT
     auto frameID = model.getFrameId("leg_l6_link", pinocchio::BODY);
-    footPosDes_.segment<3>(0) = data.oMf[frameID].translation();
-    footRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
+    if (!init_flg){
+      footPosDes_.segment<3>(0) = data.oMf[frameID].translation();
+      footRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
+    }
 
     Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jf_des;
     jf_des.setZero(6, info_.generalizedCoordinatesNum);
@@ -360,8 +362,10 @@ namespace legged
     footVelDes_.segment<6>(0) = jf_des * vDesired;
 
     frameID = model.getFrameId("leg_r6_link", pinocchio::BODY);
-    footPosDes_.segment<3>(3) = data.oMf[frameID].translation();
-    footRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
+    if (!init_flg){
+      footPosDes_.segment<3>(3) = data.oMf[frameID].translation();
+      footRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
+    }
 
     jf_des.setZero(6, info_.generalizedCoordinatesNum);
     pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jf_des);
@@ -383,17 +387,21 @@ namespace legged
 
 #if USE_6_AXIS_HAND
     frameID = model.getFrameId("zarm_l_f1_link", pinocchio::BODY);
-    handPosDes_.segment<3>(0) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation();
-    handRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
-
+    if (!init_flg){
+      handPosDes_.segment<3>(0) = data.oMf[frameID].translation() - data.oMf[model.getBodyId("base_link")].translation();
+      handRotDes_.block(0, 0, 3, 3) = data.oMf[frameID].rotation();
+    }
+    
     Eigen::Matrix<scalar_t, 6, Eigen::Dynamic> jh_des;
     jh_des.setZero(6, info_.generalizedCoordinatesNum);
     pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh_des);
     handVelDes_.segment<6>(0) = jh_des * vDesired;
 
     frameID = model.getFrameId("zarm_r_f1_link", pinocchio::BODY);
-    handPosDes_.segment<3>(3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].translation();
-    handRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation().transpose() * data.oMf[frameID].rotation();
+    if (!init_flg){
+      handPosDes_.segment<3>(3) = data.oMf[frameID].translation() - data.oMf[model.getBodyId("base_link")].translation();
+      handRotDes_.block(3, 0, 3, 3) = data.oMf[frameID].rotation();
+    }
 
     jh_des.setZero(6, info_.generalizedCoordinatesNum);
     pinocchio::getFrameJacobian(model, data, frameID, pinocchio::LOCAL_WORLD_ALIGNED, jh_des);
@@ -472,24 +480,27 @@ namespace legged
     vector_t b(a.rows());
     b.setZero();
 
-    matrix_t frictionPyramic(5, 3); // clang-format off
-  frictionPyramic << 0, 0, -1,                //-fz
+    matrix_t frictionPyramic(6, 3); // clang-format off
+    frictionPyramic << 0, 0, -1,                //-fz
+                     0, 0, 1,                   //fz
                      1, 0, -frictionCoeff_,   //fx-ufz
                     -1, 0, -frictionCoeff_,   //-fx-ufz
                      0, 1, -frictionCoeff_,   //fy-ufz
                      0,-1, -frictionCoeff_; // clang-format on
 
-    matrix_t d(5 * numContacts_ + 3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);
+    matrix_t d(6 * numContacts_ + 3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);  //接触的加入摩擦锥  没接触的不约束
     d.setZero();
+    vector_t f = Eigen::VectorXd::Zero(d.rows());
     j = 0;
     for (size_t i = 0; i < info_.numThreeDofContacts; ++i)
     {
       if (contactFlag_[i])
       {
-        d.block(5 * j++, info_.generalizedCoordinatesNum + 3 * i, 5, 3) = frictionPyramic;
+        d.block(6 * j, info_.generalizedCoordinatesNum + 3 * i, 6, 3) = frictionPyramic;
+        f.segment(6 * j, 2) << -10, 1000;
+        j++;
       }
     }
-    vector_t f = Eigen::VectorXd::Zero(d.rows());
 
     return {a, b, d, f};
   }
@@ -886,7 +897,7 @@ namespace legged
     b.segment<3>(3) = handAKp_ * rotErrL + handAKd_ * (handVelDes_ - handVelMea_).segment<3>(3);
     b.segment<3>(6) = handLKp_ * (handPosDes_ - handPosMea_).segment<3>(3) + handLKd_ * (handVelDes_ - handVelMea_).segment<3>(6);
     b.segment<3>(9) = handAKp_ * rotErrR + handAKd_ * (handVelDes_ - handVelMea_).segment<3>(9);
-    b -= djf * vMeasured_;
+    b -= djh * vMeasured_;
 
     return {a, b, matrix_t(), vector_t()};
   }

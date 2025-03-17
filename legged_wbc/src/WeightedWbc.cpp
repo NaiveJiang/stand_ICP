@@ -139,7 +139,8 @@ namespace legged
 
   Task WeightedWbc::formulateConstraints()
   {
-    return /*formulateFloatingBaseEomTask()*/ formulateCentroidalDynamicsTask() + formulateFrictionConeTask() 
+    if (stance_mode_){
+      return /*formulateFloatingBaseEomTask()*/ formulateCentroidalDynamicsTask() + formulateFrictionConeTask() 
     + formulateBaseAngularMotionTask()
 #if USE_6_AXIS_HAND
     + formulateHandTask()
@@ -147,6 +148,11 @@ namespace legged
     + formulateArmTask()
 #endif 
     + formulatefootTask();
+    }
+    else{
+      return formulateFloatingBaseEomTask() + formulateFrictionConeTask() + formulateBaseAngularMotionTask();
+    }
+    
   }
 
   Task WeightedWbc::formulateWeightedTasks(const vector_t &stateDesired, const vector_t &inputDesired, scalar_t period)
